@@ -1,4 +1,4 @@
-name: Publish Docker image
+name: Publish All Docker Images
 
 on:
   release:
@@ -6,40 +6,62 @@ on:
   workflow_dispatch:
 
 jobs:
-  docker:
+  build-and-push:
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
 
+    # This matrix defines all the images we want to build
+    strategy:
+      fail-fast: false # If one fails, let the others finish
+      matrix:
+        include:
+          # Main App
+          - name: worldmonitor
+            file: Dockerfile
+          # AIS Relay
+          - name: worldmonitor-ais-relay
+            file: Dockerfile.relay
+          # Cron: Resilience Validation
+          - name: worldmonitor-resilience
+            file: Dockerfile.seed-bundle-resilience-validation
+          # Cron: Port Activity
+          - name: worldmonitor-port-activity
+            file: Dockerfile.seed-bundle-portwatch-port-activity
+          # Cron: Digest Notifications
+          - name: worldmonitor-digest
+            file: Dockerfile.digest-notifications
+
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@v4
 
-      - uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4
+      - uses: docker/setup-qemu-action@v3
 
-      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
+      - uses: docker/setup-buildx-action@v3
 
-      - uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4
+      - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6
+      # Generates the tags and names the image dynamically based on the matrix
+      # e.g., ghcr.io/your-username/worldmonitor-digest
+      - uses: docker/metadata-action@v5
         id: meta
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable=${{ github.event_name == 'release' }}
+            type=raw,value=latest,enable=${{ github.event_name == 'release' || github.event_name == 'workflow_dispatch' }}
             type=sha,prefix=sha-
 
-      - uses: docker/build-push-action@d08e5c354a6adb9ed34480a06d141179aa583294 # v7
+      - uses: docker/build-push-action@v5
         with:
           context: .
-          # UPDATED: Now points to the root Dockerfile for the full stack
-          file: Dockerfile
+          file: ${{ matrix.file }}
           push: true
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
