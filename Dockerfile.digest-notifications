@@ -30,6 +30,9 @@
 
 FROM node:22-alpine
 
+# Install native build dependencies for arm64 node-gyp compilation
+RUN apk add --no-cache python3 make g++
+
 WORKDIR /app
 
 # The repo-root package.json has "type":"module" which tells Node to
