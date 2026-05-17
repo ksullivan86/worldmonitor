@@ -11,6 +11,9 @@ FROM node:22-alpine AS builder
 
 WORKDIR /app
 
+# UPDATED: Install native build dependencies for arm64 node-gyp compilation
+RUN apk add --no-cache python3 make g++
+
 # Install root dependencies (layer-cached until package.json changes)
 COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts
