@@ -12,26 +12,34 @@ jobs:
       contents: read
       packages: write
 
-    # This matrix defines all the images we want to build
     strategy:
-      fail-fast: false # If one fails, let the others finish
+      fail-fast: false
       matrix:
         include:
           # Main App
           - name: worldmonitor
             file: Dockerfile
+            context: .
           # AIS Relay
           - name: worldmonitor-ais-relay
             file: Dockerfile.relay
+            context: .
+          # Redis REST Proxy (Notice the different context and file path)
+          - name: worldmonitor-redis-rest
+            file: ./docker/Dockerfile.redis-rest
+            context: ./docker
           # Cron: Resilience Validation
           - name: worldmonitor-resilience
             file: Dockerfile.seed-bundle-resilience-validation
+            context: .
           # Cron: Port Activity
           - name: worldmonitor-port-activity
             file: Dockerfile.seed-bundle-portwatch-port-activity
+            context: .
           # Cron: Digest Notifications
           - name: worldmonitor-digest
             file: Dockerfile.digest-notifications
+            context: .
 
     steps:
       - uses: actions/checkout@v4
@@ -46,8 +54,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Generates the tags and names the image dynamically based on the matrix
-      # e.g., ghcr.io/your-username/worldmonitor-digest
       - uses: docker/metadata-action@v5
         id: meta
         with:
@@ -60,7 +66,8 @@ jobs:
 
       - uses: docker/build-push-action@v5
         with:
-          context: .
+          # Now pulls the context dynamically from the matrix
+          context: ${{ matrix.context }}
           file: ${{ matrix.file }}
           push: true
           platforms: linux/amd64,linux/arm64
