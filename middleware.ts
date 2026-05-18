@@ -6,20 +6,6 @@ const SOCIAL_PREVIEW_UA =
 
 const SOCIAL_PREVIEW_PATHS = new Set(['/api/story', '/api/og-story']);
 
-// Paths that bypass bot/script UA filtering below. Each must carry its own
-// auth (API key, shared secret, or intentionally-public semantics) because
-// this list disables the middleware's generic bot gate.
-// - /api/version, /api/health: intentionally public, monitoring-friendly.
-// - /api/seed-contract-probe: requires RELAY_SHARED_SECRET header; called by
-//   UptimeRobot + ops curl. Was blocked by the curl/bot UA regex before this
-//   exception landed (Vercel log 2026-04-15: "Middleware 403 Forbidden" on
-//   /api/seed-contract-probe).
-// - /api/internal/brief-why-matters: requires RELAY_SHARED_SECRET Bearer
-//   (subtle-crypto HMAC timing-safe compare in server/_shared/internal-auth.ts).
-//   Called from the Railway digest-notifications cron whose fetch() uses the
-//   Node undici default UA, which is short enough to trip the "no UA or
-//   suspiciously short" 403 below (Railway log 2026-04-21 post-#3248 merge:
-//   every cron call returned 403 and silently fell back to legacy Gemini).
 const PUBLIC_API_PATHS = new Set([
   '/api/version',
   '/api/health',
@@ -30,60 +16,58 @@ const PUBLIC_API_PATHS = new Set([
 const SOCIAL_IMAGE_UA =
   /Slack-ImgProxy|Slackbot|twitterbot|facebookexternalhit|linkedinbot|telegrambot|whatsapp|discordbot|redditbot/i;
 
-// Must match the exact route shape enforced by
-// api/brief/carousel/[userId]/[issueDate]/[page].ts:
-//   /api/brief/carousel/<userId>/YYYY-MM-DD-HHMM/<0|1|2>
-// The issueDate segment is a per-run slot (date + HHMM in the user's
-// tz) so same-day digests produce distinct carousel URLs.
-// pageFromIndex() in brief-carousel-render.ts accepts only 0/1/2, so
-// the trailing segment is tightly bounded.
 const BRIEF_CAROUSEL_PATH_RE =
   /^\/api\/brief\/carousel\/[^/]+\/\d{4}-\d{2}-\d{2}-\d{4}\/[0-2]\/?$/;
 
+// Safely grab the environment variable across Edge/Node environments
+const globalEnv = (globalThis as any).process?.env;
+const ROOT_DOMAIN = globalEnv?.VITE_ROOT_DOMAIN || 'worldmonitor.app';
+
+// Dynamically generate the variant host map using your custom domain
 const VARIANT_HOST_MAP: Record<string, string> = {
-  'tech.worldmonitor.app': 'tech',
-  'finance.worldmonitor.app': 'finance',
-  'commodity.worldmonitor.app': 'commodity',
-  'happy.worldmonitor.app': 'happy',
-  'energy.worldmonitor.app': 'energy',
+  [`tech.${ROOT_DOMAIN}`]: 'tech',
+  [`finance.${ROOT_DOMAIN}`]: 'finance',
+  [`commodity.${ROOT_DOMAIN}`]: 'commodity',
+  [`happy.${ROOT_DOMAIN}`]: 'happy',
+  [`energy.${ROOT_DOMAIN}`]: 'energy',
 };
 
-// Source of truth: src/config/variant-meta.ts — keep in sync when variant metadata changes.
+// Dynamically generate the Open Graph social preview URLs using your custom domain
 const VARIANT_OG: Record<string, { title: string; description: string; image: string; url: string }> = {
   tech: {
     title: 'Tech Monitor - Real-Time AI & Tech Industry Dashboard',
     description: 'Real-time AI and tech industry dashboard tracking tech giants, AI labs, startup ecosystems, funding rounds, and tech events worldwide.',
-    image: 'https://tech.worldmonitor.app/favico/tech/og-image.png',
-    url: 'https://tech.worldmonitor.app/',
+    image: `https://tech.${ROOT_DOMAIN}/favico/tech/og-image.png`,
+    url: `https://tech.${ROOT_DOMAIN}/`,
   },
   finance: {
     title: 'Finance Monitor - Real-Time Markets & Trading Dashboard',
     description: 'Real-time finance and trading dashboard tracking global markets, stock exchanges, central banks, commodities, forex, crypto, and economic indicators worldwide.',
-    image: 'https://finance.worldmonitor.app/favico/finance/og-image.png',
-    url: 'https://finance.worldmonitor.app/',
+    image: `https://finance.${ROOT_DOMAIN}/favico/finance/og-image.png`,
+    url: `https://finance.${ROOT_DOMAIN}/`,
   },
   commodity: {
     title: 'Commodity Monitor - Real-Time Commodity Markets & Supply Chain Dashboard',
     description: 'Real-time commodity markets dashboard tracking mining sites, processing plants, commodity ports, supply chains, and global commodity trade flows.',
-    image: 'https://commodity.worldmonitor.app/favico/commodity/og-image.png',
-    url: 'https://commodity.worldmonitor.app/',
+    image: `https://commodity.${ROOT_DOMAIN}/favico/commodity/og-image.png`,
+    url: `https://commodity.${ROOT_DOMAIN}/`,
   },
   happy: {
     title: 'Happy Monitor - Good News & Global Progress',
     description: 'Curated positive news, progress data, and uplifting stories from around the world.',
-    image: 'https://happy.worldmonitor.app/favico/happy/og-image.png',
-    url: 'https://happy.worldmonitor.app/',
+    image: `https://happy.${ROOT_DOMAIN}/favico/happy/og-image.png`,
+    url: `https://happy.${ROOT_DOMAIN}/`,
   },
   energy: {
     title: 'Energy Atlas - Real-Time Global Energy Intelligence Dashboard',
     description: 'Real-time global energy atlas tracking oil and gas pipelines, storage facilities, chokepoints, fuel shortages, tanker flows, and disruption events worldwide.',
-    image: 'https://energy.worldmonitor.app/favico/energy/og-image.png',
-    url: 'https://energy.worldmonitor.app/',
+    image: `https://energy.${ROOT_DOMAIN}/favico/energy/og-image.png`,
+    url: `https://energy.${ROOT_DOMAIN}/`,
   },
 };
 
 const ALLOWED_HOSTS = new Set([
-  'worldmonitor.app',
+  ROOT_DOMAIN,
   ...Object.keys(VARIANT_HOST_MAP),
 ]);
 const VERCEL_PREVIEW_RE = /^[a-z0-9-]+-[a-z0-9]{8,}\.vercel\.app$/;
@@ -137,21 +121,6 @@ export default function middleware(request: Request) {
     return;
   }
 
-  // Allow social preview/image bots on OG image assets.
-  //
-  // Image-returning API routes that don't end in `.png` also need
-  // an explicit carve-out — otherwise server-side fetches from
-  // Slack / Telegram / Discord / LinkedIn / WhatsApp / Facebook /
-  // Twitter / Reddit all trip the BOT_UA gate below. Telegram
-  // surfaces it as error 400 "WEBPAGE_CURL_FAILED" on sendMediaGroup;
-  // the others silently drop the preview image.
-  //
-  // Only the brief carousel route shape is allowlisted — a strict
-  // regex (same shape enforced by the handler) prevents a future
-  // /api/brief/carousel/admin or similar sibling from accidentally
-  // inheriting this bypass. HMAC token in the URL is the real auth;
-  // this allowlist is defence-in-depth for any well-shaped request
-  // whose UA happens to be in SOCIAL_IMAGE_UA.
   if (
     path.startsWith('/favico/') ||
     path.endsWith('.png') ||
@@ -172,13 +141,6 @@ export default function middleware(request: Request) {
     return;
   }
 
-  // Authenticated Pro API clients bypass UA filtering. This is a cheap
-  // edge heuristic, not auth — real validation (SHA-256 hash vs Convex
-  // userApiKeys + entitlement) happens in server/gateway.ts. To keep the
-  // bot-UA shield meaningful, require the exact key shape emitted by
-  // src/services/api-keys.ts:generateKey: `wm_` + 40 lowercase hex chars.
-  // A random scraper would have to guess a specific 43-char format, and
-  // spoofed-but-well-shaped keys still 401 at the gateway.
   const WM_KEY_SHAPE = /^wm_[a-f0-9]{40}$/;
   const apiKey =
     request.headers.get('x-worldmonitor-key') ??
