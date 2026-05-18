@@ -50,28 +50,21 @@ export function selectSourcesUnderCap(
   cap: number,
 ): SourceCapResult {
   
-  let isCapDisabled = false;
-
-  // 1. Check Vite browser environment (Frontend UI paywall drop)
-  if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_ENABLE_SELF_HOSTED_PRO_FEATURES === 'true') {
-    isCapDisabled = true;
-  }
-
-  // 2. Check standard Node environment safely without triggering VS Code 'process' errors (Backend/CI tests)
+  // Safely check for a custom user-defined cap (supports both Node and Vite Edge environments)
   const globalEnv = (globalThis as any).process?.env;
-  if (globalEnv?.ENABLE_SELF_HOSTED_PRO_FEATURES === 'true') {
-    isCapDisabled = true;
-  }
-
-  // 3. Override the cap if either environment confirms the flag
-  if (isCapDisabled) {
-    cap = 99999;
+  const customCapEnv = globalEnv?.VITE_CUSTOM_SOURCE_CAP || (typeof import.meta !== 'undefined' ? import.meta.env?.VITE_CUSTOM_SOURCE_CAP : undefined);
+  
+  // If the user provided a valid custom cap via environment variables, override the default
+  const parsedCustomCap = Number(customCapEnv);
+  if (!isNaN(parsedCustomCap) && parsedCustomCap > 0) {
+    cap = parsedCustomCap;
   }
 
   if (cap < 0) {
     return { keep: new Set(), autoDisabled: new Set() };
   }
 
+  // Build per-category queues of eligible sources (excluding user-disabled).
   const buckets: Array<{ category: string; remaining: string[] }> = [];
   for (const [category, feeds] of Object.entries(feedsByCategory)) {
     if (!feeds) continue;
@@ -83,6 +76,7 @@ export function selectSourcesUnderCap(
 
   const keep = new Set<string>();
 
+  // Round-robin processing loop
   let madeProgress = true;
   while (keep.size < cap && madeProgress) {
     madeProgress = false;
@@ -97,6 +91,7 @@ export function selectSourcesUnderCap(
     }
   }
 
+  // Collect auto-disabled sources
   const autoDisabled = new Set<string>();
   for (const bucket of buckets) {
     for (const name of bucket.remaining) {
