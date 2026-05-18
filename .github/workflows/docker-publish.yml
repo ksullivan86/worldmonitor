@@ -71,8 +71,11 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
-          # Pass the Clerk key into the build (defaults to empty string if secret is not set)
+          # Pass the Clerk key and custom self-hosting overrides into the build (defaults to empty string if secret is not set)
           build-args: |
             VITE_CLERK_PUBLISHABLE_KEY=${{ secrets.VITE_CLERK_PUBLISHABLE_KEY || '' }}
+            VITE_CUSTOM_SOURCE_CAP=9999
+            VITE_ROOT_DOMAIN=yourdomain.com
+            VITE_VARIANT=full
           cache-from: type=gha
           cache-to: type=gha,mode=max

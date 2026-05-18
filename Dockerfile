@@ -33,6 +33,19 @@ RUN node docker/build-handlers.mjs
 ARG VITE_CLERK_PUBLISHABLE_KEY=""
 ENV VITE_CLERK_PUBLISHABLE_KEY=$VITE_CLERK_PUBLISHABLE_KEY
 
+# ==========================================
+# SELF-HOSTING OVERRIDES & ROUTING
+# Inject custom caps and domains before Vite compiles the static UI
+# ==========================================
+ARG VITE_CUSTOM_SOURCE_CAP=""
+ENV VITE_CUSTOM_SOURCE_CAP=$VITE_CUSTOM_SOURCE_CAP
+
+ARG VITE_VARIANT=""
+ENV VITE_VARIANT=$VITE_VARIANT
+
+ARG VITE_ROOT_DOMAIN=""
+ENV VITE_ROOT_DOMAIN=$VITE_ROOT_DOMAIN
+
 # Build Vite frontend (outputs to dist/)
 # Skip blog build — blog-site has its own deps not installed here
 RUN npx tsc && npx vite build
