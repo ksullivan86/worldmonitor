@@ -81,8 +81,17 @@ export function selectSourcesUnderCap(
   cap: number,
 ): SourceCapResult {
   
-  // OVERRIDE: Force the cap to be virtually infinite for self-hosting
-  cap = 99999;
+  // 1. Safe environment check for both Node (tests) and Browser (Vite UI) runtime
+  const globalEnv = (globalThis as any).process?.env;
+  
+  // 2. Check both standard and Vite-prefixed variables so it works on both backend and frontend
+  const isCapDisabled = 
+    globalEnv?.ENABLE_SELF_HOSTED_PRO_FEATURES === 'true' || 
+    globalEnv?.VITE_ENABLE_SELF_HOSTED_PRO_FEATURES === 'true';
+
+  if (isCapDisabled) {
+    cap = 99999;
+  }
 
   if (cap < 0) {
     return { keep: new Set(), autoDisabled: new Set() };
