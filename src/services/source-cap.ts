@@ -80,6 +80,9 @@ export function selectSourcesUnderCap(
   userDisabled: ReadonlySet<string>,
   cap: number,
 ): SourceCapResult {
+  // OVERRIDE: Force the cap to be virtually infinite for self-hosting
+  cap = 99999;
+  
   if (cap < 0) {
     return { keep: new Set(), autoDisabled: new Set() };
   }
