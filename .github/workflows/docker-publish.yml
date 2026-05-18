@@ -24,7 +24,7 @@ jobs:
           - name: worldmonitor-ais-relay
             file: Dockerfile.relay
             context: .
-          # Redis REST Proxy (Notice the different context and file path)
+          # Redis REST Proxy
           - name: worldmonitor-redis-rest
             file: ./docker/Dockerfile.redis-rest
             context: ./docker
@@ -66,11 +66,13 @@ jobs:
 
       - uses: docker/build-push-action@v5
         with:
-          # Now pulls the context dynamically from the matrix
           context: ${{ matrix.context }}
           file: ${{ matrix.file }}
           push: true
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
+          # Pass the Clerk key into the build (defaults to empty string if secret is not set)
+          build-args: |
+            VITE_CLERK_PUBLISHABLE_KEY=${{ secrets.VITE_CLERK_PUBLISHABLE_KEY || '' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

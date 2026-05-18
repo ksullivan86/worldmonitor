@@ -11,7 +11,7 @@ FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# UPDATED: Install native build dependencies for arm64 node-gyp compilation
+# Install native build dependencies for arm64 node-gyp compilation
 RUN apk add --no-cache python3 make g++
 
 # Install root dependencies (layer-cached until package.json changes)
@@ -24,6 +24,14 @@ COPY . .
 # Compile TypeScript API handlers → self-contained ESM bundles
 # Output is api/**/*.js alongside the source .ts files
 RUN node docker/build-handlers.mjs
+
+# ==========================================
+# CLERK AUTHENTICATION (Optional)
+# If a build-arg is provided, inject it for Vite. 
+# If not, default to an empty string to disable auth gracefully.
+# ==========================================
+ARG VITE_CLERK_PUBLISHABLE_KEY=""
+ENV VITE_CLERK_PUBLISHABLE_KEY=$VITE_CLERK_PUBLISHABLE_KEY
 
 # Build Vite frontend (outputs to dist/)
 # Skip blog build — blog-site has its own deps not installed here
